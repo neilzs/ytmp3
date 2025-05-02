@@ -71,7 +71,7 @@ def try_alternative_download(url, bitrate):
     
     for attempt in attempts:
         try:
-            opts = get_ydl_opts(bitrate) | attempt
+            opts = {**get_ydl_opts(bitrate), **attempt}
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 audio_buffer = BytesIO()
@@ -83,7 +83,7 @@ def try_alternative_download(url, bitrate):
                         audio_buffer.write(f.read())
                     os.remove(temp_filename)
                     return audio_buffer.getvalue(), info.get('title', 'unknown')
-        except:
+        except Exception as e:
             continue
     return None, None
 
@@ -93,19 +93,13 @@ def download_audio(url, bitrate="192"):
             st.write("🔍 Connecting to YouTube...")
             
             # Coba metode utama dulu
-            ydl_opts = get_ydl_opts(bitrate)
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                title = sanitize_filename(info.get('title', 'unknown'))
-                
-                st.write("📥 Attempting download...")
-                audio_bytes, title = try_alternative_download(url, bitrate)
-                
-                if not audio_bytes:
-                    raise Exception("All download methods failed")
-                
-                status.update(label="✅ Conversion complete!", state="complete", expanded=False)
-                return audio_bytes, title
+            audio_bytes, title = try_alternative_download(url, bitrate)
+            
+            if not audio_bytes:
+                raise Exception("All download methods failed")
+            
+            status.update(label="✅ Conversion complete!", state="complete", expanded=False)
+            return audio_bytes, title
 
     except Exception as e:
         st.error(f"❌ Failed to download: {str(e)}")
