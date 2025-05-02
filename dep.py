@@ -15,39 +15,53 @@ st.set_page_config(
 def sanitize_filename(filename):
     return re.sub(r'[\\/*?:"<>|]', "", filename)
 
-def setup_ffmpeg():
-    """Menggunakan FFmpeg bawaan Streamlit Sharing"""
-    return {"ffmpeg_location": "/usr/bin/ffmpeg"} if os.path.exists("/usr/bin/ffmpeg") else {}
+def get_ydl_opts(bitrate):
+    """Konfigurasi yt-dlp dengan headers dan parameter khusus"""
+    return {
+        'format': 'bestaudio/best',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': bitrate,
+        }],
+        'outtmpl': '%(title)s.%(ext)s',
+        'quiet': True,
+        'no_warnings': False,
+        'extract_flat': False,
+        'noplaylist': True,
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Referer': 'https://www.youtube.com/',
+        },
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android'],
+                'player_skip': ['configs'],
+            }
+        },
+    }
 
 def download_audio(url, bitrate="192"):
     try:
         with st.status("Processing...", expanded=True) as status:
-            # Setup FFmpeg
-            ydl_opts = {
-                "format": "bestaudio/best",
-                "outtmpl": "%(title)s.%(ext)s",
-                "postprocessors": [{
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": bitrate,
-                }],
-                "quiet": True,
-                "no_warnings": True,
-                "noplaylist": True,
-                **setup_ffmpeg()
-            }
-
-            st.write("🔍 Getting video info...")
+            st.write("🔍 Connecting to YouTube...")
+            
+            ydl_opts = get_ydl_opts(bitrate)
+            audio_buffer = BytesIO()
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                # Ekstrak info dulu untuk validasi
                 info = ydl.extract_info(url, download=False)
                 title = sanitize_filename(info.get('title', 'unknown'))
                 
-                st.write("📥 Downloading audio...")
+                st.write("📥 Downloading audio (this may take a while)...")
                 
-                # Download ke memory buffer
-                audio_buffer = BytesIO()
+                # Download dengan retry otomatis
                 ydl.download([url])
+                
+                # Proses file hasil download
                 temp_filename = ydl.prepare_filename(info).replace('.webm', '.mp3').replace('.m4a', '.mp3')
                 
                 if os.path.exists(temp_filename):
@@ -55,12 +69,12 @@ def download_audio(url, bitrate="192"):
                         audio_buffer.write(f.read())
                     os.remove(temp_filename)
                 else:
-                    raise FileNotFoundError("Conversion failed")
+                    raise FileNotFoundError("Conversion failed - no output file")
                 
                 audio_bytes = audio_buffer.getvalue()
                 
-                if not audio_bytes:
-                    raise ValueError("Empty audio file")
+                if len(audio_bytes) == 0:
+                    raise ValueError("Empty audio file - possibly blocked by YouTube")
                 
                 status.update(label="Conversion complete!", state="complete", expanded=False)
                 return audio_bytes, title
@@ -70,44 +84,39 @@ def download_audio(url, bitrate="192"):
         return None, None
 
 # UI Streamlit
-st.title("YouTube to MP3 Converter 🎵")
-st.markdown("Convert YouTube videos to MP3 in your browser")
+st.title("🎵 YouTube to MP3 Converter")
+st.markdown("Convert YouTube videos to MP3 audio files")
 
-url = st.text_input("YouTube URL:", placeholder="https://www.youtube.com/watch?v=...", key="url_input")
+url = st.text_input("YouTube URL:", placeholder="https://www.youtube.com/watch?v=...")
 
 col1, col2 = st.columns([3, 1])
 with col1:
-    bitrate = st.select_slider("Quality:", options=["128", "192", "256", "320"], value="192")
+    bitrate = st.select_slider("Audio Quality:", options=["128", "192", "256", "320"], value="192")
 with col2:
-    convert_btn = st.button("Convert", type="primary")
-
-if convert_btn:
-    if url:
-        if "youtube.com/watch?" in url or "youtu.be/" in url:
-            audio_bytes, title = download_audio(url, bitrate)
-            
-            if audio_bytes and title:
-                st.success(f"✅ {title}")
-                st.audio(audio_bytes, format='audio/mp3')
+    if st.button("Convert", type="primary"):
+        if url and ("youtube.com/watch?" in url or "youtu.be/" in url):
+            with st.spinner("Processing your request..."):
+                audio_bytes, title = download_audio(url, bitrate)
                 
-                # Tombol download di luar form
-                st.download_button(
-                    label="⬇️ Download MP3",
-                    data=audio_bytes,
-                    file_name=f"{title}.mp3",
-                    mime="audio/mp3",
-                    key=f"dl_{hash(title)}"  # Key unik untuk setiap download
-                )
+                if audio_bytes and title:
+                    st.success(f"✅ Successfully converted: {title}")
+                    st.audio(audio_bytes, format='audio/mp3')
+                    
+                    st.download_button(
+                        label="⬇️ Download MP3",
+                        data=audio_bytes,
+                        file_name=f"{title}.mp3",
+                        mime="audio/mp3",
+                        key=f"dl_{hash(title)}"
+                    )
         else:
             st.warning("Please enter a valid YouTube URL")
-    else:
-        st.warning("Please enter a URL")
 
 # Footer
 st.divider()
 st.caption("""
 ⚠️ **Note**: 
-- Works with videos under 15 minutes
-- No files are stored permanently
-- Conversion may take a few moments
+- For personal use only (respect copyright laws)
+- May not work for some age-restricted or private videos
+- Conversion speed depends on video length
 """)
