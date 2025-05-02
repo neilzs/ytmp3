@@ -65,8 +65,8 @@ def try_alternative_download(url, bitrate):
     attempts = [
         {'format': 'bestaudio[ext=m4a]'},
         {'format': 'worstaudio'},
-        {'extractor_args': {'youtube': {'player_client': ['ios']}},
-        {'extractor_args': {'youtube': {'player_client': ['tv_embedded']}}
+        {'extractor_args': {'youtube': {'player_client': ['ios']}}},
+        {'extractor_args': {'youtube': {'player_client': ['tv_embedded']}}}
     ]
     
     for attempt in attempts:
