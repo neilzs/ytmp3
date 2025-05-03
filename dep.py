@@ -42,6 +42,12 @@ def download_audio(url, bitrate="192"):
                 st.write("🔍 Getting video info...")
                 info = ydl.extract_info(url, download=False)
                 title = sanitize_filename(info.get('title', 'unknown'))
+                video_id = info.get('id', '')
+                thumbnail_url = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
+
+                # Tampilkan thumbnail
+                st.image(thumbnail_url, caption=title, use_container_width=True)
+
 
                 st.write("📥 Downloading audio...")
                 ydl.download([url])
@@ -71,6 +77,7 @@ def download_audio(url, bitrate="192"):
     except Exception as e:
         st.error(f"❌ Error: {str(e)}")
         return None, None
+
 
 # UI Streamlit
 st.title("YouTube to MP3 Converter 🎵")
